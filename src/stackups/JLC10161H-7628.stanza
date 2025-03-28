@@ -1,0 +1,128 @@
+#use-added-syntax(jitx)
+defpackage jlc-pcb/stackups/JLC10161H-7628:
+  import core
+  import jitx
+  import jitx/commands
+
+  import maybe-utils
+  import jsl
+
+  import jlc-pcb/stackups/vias
+  import jlc-pcb/stackups/materials
+
+public val stackup-gen = make-layer-stack("JLC10161H-7628", outers) where:
+  val cu-1oz = Copper(0.035)
+  val cu-halfoz = Copper(0.0152)
+
+  val core = FR4(0.1, FR4-Core-Material, name = "core")
+  val prepreg-7628x1 = FR4(0.2008, FR4-7628-Material name = "7628x1")
+
+  val outers = [
+    [cu-1oz, prepreg-7628x1],
+    [cu-halfoz, core],
+    [cu-halfoz, prepreg-7628x1],
+    [cu-halfoz, core],
+    [cu-halfoz, prepreg-7628x1],
+  ]
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Routing Structures
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+val ext-velocity = phase-velocity((Er-7628 + 1.0) / 2.0)
+val int-velocity = phase-velocity((Er-7628 + Er-core) / 2.0)
+
+public pcb-routing-structure se-50 (neckdown:Maybe<NeckDown> = None()):
+  name = "50Ω Single-Ended - CPWG - JLC10161H-7628"
+
+  ; This expects a ground ref plane on Top + 1
+  val ext-se-50-ustrip = RoutingStructureLayerConstraints(
+    trace-width = 0.3421,
+    clearance = 0.5,
+    velocity = ext-velocity
+    insertion-loss = Dk-7628
+    neck-down = value-or-else(neckdown, {false})
+  )
+
+  ; This expects a ground ref plane on Top and Top + 2 (or Bottom and Bottom - 2)
+  val int-se-50-stripline = RoutingStructureLayerConstraints(
+    trace-width = 0.2230,
+    clearance = 0.3,
+    velocity = int-velocity
+    insertion-loss = Dk-7628
+    neck-down = value-or-else(neckdown, {false})
+  )
+
+  layer-constraints(Top) = ext-se-50-ustrip
+  layer-constraints(Bottom) = ext-se-50-ustrip
+  layer-constraints(Top + 1) = int-se-50-stripline
+  layer-constraints(Bottom - 1) = int-se-50-stripline
+
+
+public pcb-routing-structure uncoupled-diff-100-def:
+  val df-100-ustrip = RoutingStructureLayerConstraints(
+    trace-width = 0.1722,
+    clearance = 0.15,
+    velocity = ext-velocity
+    insertion-loss = Dk-7628
+  )
+  val df-100-stripline = RoutingStructureLayerConstraints(
+    trace-width = 0.1298,
+    clearance = 0.15,
+    velocity = int-velocity
+    insertion-loss = Dk-7628
+  )
+
+  layer-constraints(Top) = df-100-ustrip
+  layer-constraints(Bottom) = df-100-ustrip
+
+  layer-constraints(Top + 1) = df-100-stripline
+  layer-constraints(Bottom - 1) = df-100-stripline
+
+public pcb-differential-routing-structure diff-100 (
+  uncoupled:Maybe<RoutingStructure> = None()
+  neckdown:Maybe<DifferentialNeckDown> = None()
+  ):
+  name = "100Ω Differential Pair - CPWG - JLC10161H-7628"
+
+  make-uncoupled-region(uncoupled-diff-100-def, uncoupled)
+
+  ; This expects a ground ref plane on Top + 1
+  val df-100-ustrip = DiffRoutingStructureLayerConstraints(
+    trace-width = 0.1722
+    pair-spacing = 0.15
+    clearance = 0.3
+    velocity = ext-velocity
+    insertion-loss = Dk-7628
+    neck-down = value-or-else(neckdown, {false})
+  )
+  layer-constraints(Top) = df-100-ustrip
+  layer-constraints(Bottom) = df-100-ustrip
+
+  ; This expects a ground ref plane on Top and Top + 2 (or Bottom and Bottom - 2)
+  val df-100-stripline = DiffRoutingStructureLayerConstraints(
+    trace-width = 0.1298
+    pair-spacing = 0.15
+    clearance = 0.3
+    velocity = int-velocity
+    insertion-loss = Dk-7628
+    neck-down = value-or-else(neckdown, {false})
+  )
+
+  layer-constraints(Top + 1) = df-100-stripline
+  layer-constraints(Bottom - 1) = df-100-stripline
+
+public defn JLC10161H-7628 (vias:Tuple<Via> = JLC-VIA-DEFAULTS) -> Substrate :
+  Substrate(
+    stackup = stackup-gen,
+    vias = [
+      std-via-preferred, tented-filled-std-via
+    ],
+    single-ended = [
+      50 => se-50,
+    ]
+    differential = [
+      100 => diff-100,
+    ]
+  )
